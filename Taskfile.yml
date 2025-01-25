@@ -13,11 +13,11 @@ vars:
   BB_URL: https://busybox.net/downloads/{{.BB_TAR}}
   BB_SRC_DIR: components/busybox
   INITRAMFS_DIR: components/initramfs
+  INITRAMFS_FILE: components/initramfs.cpio.gz
 
 tasks:
   download_kernel:
     cmds:
-      - task: clean_kernel
       - echo "Downloading Linux kernel source..."
       - wget -c {{.KERNEL_URL}} -O {{.KERNEL_SRC_DIR}}/{{.KERNEL_TAR}}
       - echo "Extracting Linux kernel source..."
@@ -29,6 +29,8 @@ tasks:
   clean_kernel:
     cmds:
       - rm -rf {{.KERNEL_SRC_DIR}}
+    status:
+      - test ! -d {{.KERNEL_SRC_DIR}}
 
   config_kernel:
     dir: "{{.KERNEL_SRC_DIR}}"
@@ -41,25 +43,26 @@ tasks:
       - scripts/config --enable CONFIG_BLK_DEV_INITRD
       - scripts/config --enable CONFIG_BINFMT_ELF
       - scripts/config --enable CONFIG_BINFMT_SCRIPT
+      - scripts/config --enable CONFIG_PROC_FS
+      - scripts/config --enable CONFIG_SYSFS
       - scripts/config --enable CONFIG_64BIT
       - make olddefconfig
+    status:
+      - test -f .config
 
   compile_kernel:
     dir: "{{.KERNEL_SRC_DIR}}"
     cmds:
       - task: config_kernel
       - make -j$(nproc)
-
-  run_kernel:
-    dir: "{{.KERNEL_SRC_DIR}}"
-    cmds:
-      - task: compile_kernel
-      - task: create_initramfs
-      - qemu-system-x86_64 -kernel arch/x86/boot/bzImage -initrd ../initramfs.cpio.gz
+    sources:
+      - /**/*.c
+      - .config
+    generates:
+      - arch/x86/boot/bzImage
 
   download_busybox:
     cmds:
-      - task: clean_busybox
       - echo "Downloading Busybox source..."
       - wget -c {{.BB_URL}} -O {{.BB_SRC_DIR}}/{{.BB_TAR}}
       - echo "Extracting Busybox source..."
@@ -71,6 +74,8 @@ tasks:
   clean_busybox:
     cmds:
       - rm -rf {{.BB_SRC_DIR}}
+    status:
+      - test ! -d {{.BB_SRC_DIR}}
 
   config_busybox:
     dir: "{{.BB_SRC_DIR}}"
@@ -84,12 +89,39 @@ tasks:
     cmds:
       - task: config_busybox
       - make -j$(nproc) busybox
-      - mkdir -p ../initramfs/{bin,sbin,usr/bin,usr/sbin}
-      - cp busybox ../initramfs/bin/busybox
+    sources:
+      - /**/*.c
+    creates:
+      - busybox
 
   create_initramfs:
-    dir: "{{.INITRAMFS_DIR}}"
+    cmds:
+      - mkdir -p {{.INITRAMFS_DIR}}/{bin,sbin,usr/bin,usr/sbin}
+
+  clean_initramfs:
+    cmds:
+      - rm {{.INITRAMFS_DIR}}/bin/busybox
+      - rm {{.INITRAMFS_FILE}}
+    status:
+      - test ! -f {{.INITRAMFS_DIR}}/bin/busybox
+      - test ! -f {{.INITRAMFS_FILE}}
+
+  package_initramfs:
     cmds:
       - task: compile_busybox
-      - rm ../initramfs.cpio.gz
-      - find . -print0 | cpio --null --create --verbose --format=newc | gzip --best > ../initramfs.cpio.gz
+      - task: create_initramfs
+      - task: clean_initramfs
+      - cp {{.BB_SRC_DIR}}/busybox {{.INITRAMFS_DIR}}/bin/busybox
+      - (cd {{.INITRAMFS_DIR}} && find . -print0 | cpio --null --create --verbose --format=newc | gzip --best) > "{{.INITRAMFS_FILE}}"
+
+  run:
+    cmds:
+      - task: compile_kernel
+      - task: package_initramfs
+      - qemu-system-x86_64 -kernel {{.KERNEL_SRC_DIR}}/arch/x86/boot/bzImage -initrd {{.INITRAMFS_FILE}}
+
+  clean:
+    cmds:
+      - task: clean_kernel
+      - task: clean_busybox
+      - task: clean_initramfs
