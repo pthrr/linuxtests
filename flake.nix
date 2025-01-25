@@ -6,17 +6,20 @@
   outputs = {nixpkgs, ...}: let
     system = "x86_64-linux";
     pkgs = nixpkgs.legacyPackages.${system};
+
+    kernel = pkgs.linuxPackages_6_12.kernel;
   in {
     devShells.${system}.default = pkgs.mkShell {
       nativeBuildInputs = with pkgs; [
-        gcc
-        flex
-        bison
-        bc
-        qemu
         ncurses
-        pkg-config
+        kernel.dev
+        elfutils
       ];
+
+      shellHook = ''
+        export KDIR="${kernel.dev}/lib/modules/${kernel.modDirVersion}/build"
+        echo "KDIR set to: $KDIR"
+      '';
     };
   };
 }

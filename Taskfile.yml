@@ -14,6 +14,12 @@ vars:
   BB_SRC_DIR: components/busybox
   INITRAMFS_DIR: components/initramfs
   INITRAMFS_FILE: components/initramfs.cpio.gz
+  HELLOMOD_DIR: components/hellomod
+
+includes:
+  hellomod:
+    taskfile:  "{{.HELLOMOD_DIR}}/Taskfile.yml"
+    dir: "{{.HELLOMOD_DIR}}"
 
 tasks:
   download_kernel:
@@ -26,16 +32,21 @@ tasks:
     status:
       - test -d {{.KERNEL_SRC_DIR}}
 
-  clean_kernel:
+  delete_kernel:
     cmds:
       - rm -rf {{.KERNEL_SRC_DIR}}
     status:
       - test ! -d {{.KERNEL_SRC_DIR}}
 
-  config_kernel:
+  clean_kernel:
     dir: "{{.KERNEL_SRC_DIR}}"
     cmds:
       - make mrproper
+
+  config_kernel:
+    dir: "{{.KERNEL_SRC_DIR}}"
+    cmds:
+      - task: clean_kernel
       - make tinyconfig
       - scripts/config --enable CONFIG_PRINTK
       - scripts/config --enable CONFIG_EARLY_PRINTK
@@ -45,6 +56,7 @@ tasks:
       - scripts/config --enable CONFIG_BINFMT_SCRIPT
       - scripts/config --enable CONFIG_PROC_FS
       - scripts/config --enable CONFIG_SYSFS
+      - scripts/config --enable CONFIG_MODULES
       - scripts/config --enable CONFIG_64BIT
       - make olddefconfig
     status:
@@ -55,11 +67,8 @@ tasks:
     cmds:
       - task: config_kernel
       - make -j$(nproc)
-    sources:
-      - /**/*.c
-      - .config
-    generates:
-      - arch/x86/boot/bzImage
+    status:
+      - test -f arch/x86_64/boot/bzImage
 
   download_busybox:
     cmds:
@@ -71,11 +80,16 @@ tasks:
     status:
       - test -d {{.BB_SRC_DIR}}
 
-  clean_busybox:
+  delete_busybox:
     cmds:
       - rm -rf {{.BB_SRC_DIR}}
     status:
       - test ! -d {{.BB_SRC_DIR}}
+
+  clean_busybox:
+    dir: "{{.BB_SRC_DIR}}"
+    cmds:
+      - make clean
 
   config_busybox:
     dir: "{{.BB_SRC_DIR}}"
@@ -83,45 +97,56 @@ tasks:
       - make defconfig
       - sed -i 's/# CONFIG_STATIC is not set/CONFIG_STATIC=y/' .config
       - sed -i 's/CONFIG_TC=y/CONFIG_TC=n/' .config
+    status:
+      - test -f .config
 
   compile_busybox:
     dir: "{{.BB_SRC_DIR}}"
     cmds:
       - task: config_busybox
       - make -j$(nproc) busybox
-    sources:
-      - /**/*.c
-    creates:
-      - busybox
+    status:
+      - test -f busybox
 
   create_initramfs:
     cmds:
-      - mkdir -p {{.INITRAMFS_DIR}}/{bin,sbin,usr/bin,usr/sbin}
+      - mkdir -p {{.INITRAMFS_DIR}}/{bin,sbin,usr/bin,usr/sbin,opt}
 
   clean_initramfs:
     cmds:
-      - rm {{.INITRAMFS_DIR}}/bin/busybox
-      - rm {{.INITRAMFS_FILE}}
-    status:
-      - test ! -f {{.INITRAMFS_DIR}}/bin/busybox
-      - test ! -f {{.INITRAMFS_FILE}}
+      - rm -f {{.INITRAMFS_DIR}}/bin/busybox
+      - rm -f {{.INITRAMFS_DIR}}/opt/hello.ko
+      - rm -f {{.INITRAMFS_FILE}}
 
   package_initramfs:
     cmds:
       - task: compile_busybox
+      - task: hellomod:build
       - task: create_initramfs
       - task: clean_initramfs
       - cp {{.BB_SRC_DIR}}/busybox {{.INITRAMFS_DIR}}/bin/busybox
+      - cp {{.HELLOMOD_DIR}}/hello.ko {{.INITRAMFS_DIR}}/opt/hello.ko
       - (cd {{.INITRAMFS_DIR}} && find . -print0 | cpio --null --create --verbose --format=newc | gzip --best) > "{{.INITRAMFS_FILE}}"
 
   run:
     cmds:
       - task: compile_kernel
       - task: package_initramfs
-      - qemu-system-x86_64 -kernel {{.KERNEL_SRC_DIR}}/arch/x86/boot/bzImage -initrd {{.INITRAMFS_FILE}}
+      - qemu-system-x86_64 -kernel {{.KERNEL_SRC_DIR}}/arch/x86_64/boot/bzImage -initrd {{.INITRAMFS_FILE}}
 
   clean:
     cmds:
       - task: clean_kernel
       - task: clean_busybox
       - task: clean_initramfs
+      - task: hellomod:clean
+
+  download:
+    cmds:
+      - task: download_kernel
+      - task: download_busybox
+
+  delete:
+    cmds:
+      - task: delete_kernel
+      - task: delete_busybox

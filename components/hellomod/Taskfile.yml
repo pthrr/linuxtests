@@ -1,0 +1,10 @@
+version: '3'
+
+tasks:
+  clean:
+    cmds:
+      - make clean
+
+  build:
+    cmds:
+      - make all
