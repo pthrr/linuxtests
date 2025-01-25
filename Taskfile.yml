@@ -16,6 +16,9 @@ vars:
   INITRAMFS_FILE: components/initramfs.cpio.gz
   HELLOMOD_DIR: components/hellomod
 
+env:
+  KDIR: "{{.KERNEL_SRC_DIR}}"
+
 includes:
   hellomod:
     taskfile:  "{{.HELLOMOD_DIR}}/Taskfile.yml"
