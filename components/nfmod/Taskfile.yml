@@ -1,0 +1,12 @@
+version: '3'
+
+tasks:
+  clean:
+    cmds:
+      - echo "Cleaning with KDIR {{.KDIR}}"
+      - make clean KDIR="{{.KDIR}}"
+
+  build:
+    cmds:
+      - echo "Building with KDIR {{.KDIR}}"
+      - make all KDIR="{{.KDIR}}"

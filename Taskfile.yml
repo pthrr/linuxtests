@@ -106,6 +106,7 @@ tasks:
       - scripts/config --enable CONFIG_PROC_FS
       - scripts/config --enable CONFIG_SYSFS
       - scripts/config --enable CONFIG_MODULES
+      - scripts/config --enable CONFIG_RUST
       - scripts/config --enable CONFIG_64BIT
       - make olddefconfig
     status:
@@ -122,7 +123,7 @@ tasks:
   compile_rustkernel:
     dir: "{{.RUST_KERNEL_SRC_DIR}}"
     cmds:
-      - task: config_kernel
+      - task: config_rustkernel
       - make -j$(nproc)
     status:
       - test -f arch/x86_64/boot/bzImage
@@ -184,14 +185,17 @@ tasks:
         vars: {KDIR: "{{.KDIR}}"}
       - task: hellomod:build
         vars: {KDIR: "{{.KDIR}}"}
-      # - task: nfmod:build
-        # vars: {KDIR: "{{.KDIR}}"}
+      - task: nfmod:clean
+        vars: {KDIR: "{{.KDIR}}"}
+      - task: nfmod:build
+        vars: {KDIR: "{{.KDIR}}"}
       # - task: drvmod:build
         # vars: {KDIR: "{{.KDIR}}"}
       - task: create_initramfs
       - task: clean_initramfs
       - cp {{.BB_SRC_DIR}}/busybox {{.INITRAMFS_DIR}}/bin/busybox
       - cp {{.HELLOMOD_DIR}}/hello.ko {{.INITRAMFS_DIR}}/opt/hello.ko
+      - cp {{.NFMOD_DIR}}/nf.ko {{.INITRAMFS_DIR}}/opt/nf.ko
       - (cd {{.INITRAMFS_DIR}} && find . -print0 | cpio --null --create --verbose --format=newc | gzip --best) > "{{.INITRAMFS_FILE}}"
 
   run:
@@ -215,7 +219,9 @@ tasks:
       - task: clean_busybox
       - task: clean_initramfs
       - task: hellomod:clean
+        vars: {KDIR: "{{.ROOT_DIR}}/{{.RUST_KERNEL_SRC_DIR}}"}
       - task: nfmod:clean
+        vars: {KDIR: "{{.ROOT_DIR}}/{{.RUST_KERNEL_SRC_DIR}}"}
 
   download:
     cmds:

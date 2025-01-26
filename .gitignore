@@ -1,5 +1,7 @@
 .task/
 
+target.json
+
 components/kernel/
 components/rust_kernel/
 components/busybox/
