@@ -31,6 +31,10 @@ includes:
     dir: "{{.NFMOD_DIR}}"
 
 tasks:
+  default:
+    cmds:
+      - task --list-all
+
   download_kernel:
     cmds:
       - echo "Downloading Linux kernel source..."
@@ -108,7 +112,10 @@ tasks:
       - scripts/config --enable CONFIG_MODULES
       - scripts/config --enable CONFIG_RUST
       - scripts/config --enable CONFIG_64BIT
-      - make olddefconfig
+      - scripts/config --enable CONFIG_X86_64
+      - scripts/config --disable CONFIG_X86_32
+      - make ARCH=x86_64 olddefconfig
+      - make ARCH=x86_64 rustavailable
     status:
       - test -f .config
 
@@ -116,7 +123,7 @@ tasks:
     dir: "{{.KERNEL_SRC_DIR}}"
     cmds:
       - task: config_kernel
-      - make -j$(nproc)
+      - make ARCH=x86_64 -j$(nproc)
     status:
       - test -f arch/x86_64/boot/bzImage
 
@@ -124,6 +131,8 @@ tasks:
     dir: "{{.RUST_KERNEL_SRC_DIR}}"
     cmds:
       - task: config_rustkernel
+      - rustup install 1.78.0
+      - rustup override set 1.78.0
       - make -j$(nproc)
     status:
       - test -f arch/x86_64/boot/bzImage
@@ -181,21 +190,21 @@ tasks:
   package_initramfs:
     cmds:
       - task: compile_busybox
-      - task: hellomod:clean
-        vars: {KDIR: "{{.KDIR}}"}
-      - task: hellomod:build
-        vars: {KDIR: "{{.KDIR}}"}
-      - task: nfmod:clean
-        vars: {KDIR: "{{.KDIR}}"}
-      - task: nfmod:build
-        vars: {KDIR: "{{.KDIR}}"}
+      # - task: hellomod:clean
+      #   vars: {KDIR: "{{.KDIR}}"}
+      # - task: hellomod:build
+      #   vars: {KDIR: "{{.KDIR}}"}
+      # - task: nfmod:clean
+      #   vars: {KDIR: "{{.KDIR}}"}
+      # - task: nfmod:build
+      #   vars: {KDIR: "{{.KDIR}}"}
       # - task: drvmod:build
         # vars: {KDIR: "{{.KDIR}}"}
       - task: create_initramfs
       - task: clean_initramfs
       - cp {{.BB_SRC_DIR}}/busybox {{.INITRAMFS_DIR}}/bin/busybox
-      - cp {{.HELLOMOD_DIR}}/hello.ko {{.INITRAMFS_DIR}}/opt/hello.ko
-      - cp {{.NFMOD_DIR}}/nf.ko {{.INITRAMFS_DIR}}/opt/nf.ko
+      # - cp {{.HELLOMOD_DIR}}/hello.ko {{.INITRAMFS_DIR}}/opt/hello.ko
+      # - cp {{.NFMOD_DIR}}/nf.ko {{.INITRAMFS_DIR}}/opt/nf.ko
       - (cd {{.INITRAMFS_DIR}} && find . -print0 | cpio --null --create --verbose --format=newc | gzip --best) > "{{.INITRAMFS_FILE}}"
 
   run:

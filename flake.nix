@@ -14,6 +14,16 @@
         ncurses
         kernel.dev
         elfutils
+        glibc.dev
+        glibc.static
+        gcc12
+        binutils
+        flex
+        bison
+        elfutils
+        bc
+        kmod
+        pahole
       ];
 
       shellHook = ''
