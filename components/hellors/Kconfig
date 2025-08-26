@@ -1,0 +1,5 @@
+config HELLO_WORLD
+	tristate "Hello World Rust Module"
+	depends on RUST
+	help
+	  A simple hello world kernel module written in Rust.

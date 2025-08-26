@@ -1,0 +1,26 @@
+# https://taskfile.dev
+
+version: '3'
+
+tasks:
+  default:
+    cmds:
+      - task --list--all
+
+  clean:
+    cmds:
+      - echo "Cleaning with KDIR {{.KDIR}}"
+      - make V=1 clean KDIR="{{.KDIR}}" -j$(nproc)
+
+  build:
+    cmds:
+      - echo "Building with KDIR {{.KDIR}}"
+      # - make V=1 RUSTC=/nix/store/bwkxjbcbc88gj21c24n1ck199n0pm5wh-rustc-1.83.0/bin/rustc all KDIR="/nix/store/6b9j17qfxdvyh9kmi9fjgh6zg0ix8if5-linux-6.13-dev/lib/modules/6.13.0/build" -j$(nproc)
+      # - make V=1 all KDIR="{{.KDIR}}" -j$(nproc)
+      - rustup install 1.83.0
+      - rustup override set 1.83.0
+      # - rustup component add rust-src
+      # - export RUSTFLAGS="-Zbuild-std=core,alloc"
+      # - rustup component add rust-src
+      # - export RUST_LIB_SRC="$(rustc --print sysroot)/lib/rustlib/src/rust/library"
+      - make RUSTC=$(which rustc) all KDIR="{{.KDIR}}" -j$(nproc)

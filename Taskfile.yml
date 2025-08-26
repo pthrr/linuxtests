@@ -4,23 +4,28 @@ version: "3"
 
 vars:
   ROOT_DIR: "{{.TASKFILE_DIR}}"
+
   KERNEL_VERSION: 6.12.10
   KERNEL_TAR: linux-{{.KERNEL_VERSION}}.tar.xz
   KERNEL_URL: https://cdn.kernel.org/pub/linux/kernel/v6.x/{{.KERNEL_TAR}}
   KERNEL_SRC_DIR: components/kernel
+
   RUST_KERNEL_VERSION: 6.13
   RUST_KERNEL_TAR: rust-{{.RUST_KERNEL_VERSION}}.tar.gz
   RUST_KERNEL_URL: https://github.com/Rust-for-Linux/linux/archive/refs/tags/{{.RUST_KERNEL_TAR}}
   RUST_KERNEL_SRC_DIR: components/rust_kernel
+
   BB_VERSION: 1.37.0
   BB_TAR: busybox-{{.BB_VERSION}}.tar.bz2
   BB_URL: https://busybox.net/downloads/{{.BB_TAR}}
   BB_SRC_DIR: components/busybox
+
   INITRAMFS_DIR: components/initramfs
   INITRAMFS_FILE: components/initramfs.cpio.gz
   HELLOMOD_DIR: components/hellomod
   NFMOD_DIR: components/nfmod
   DRVMOD_DIR: components/drvmod
+  HRSMOD_DIR: components/hellors
 
 includes:
   hellomod:
@@ -29,6 +34,9 @@ includes:
   nfmod:
     taskfile:  "{{.NFMOD_DIR}}/Taskfile.yml"
     dir: "{{.NFMOD_DIR}}"
+  hrsmod:
+    taskfile:  "{{.HRSMOD_DIR}}/Taskfile.yml"
+    dir: "{{.HRSMOD_DIR}}"
 
 tasks:
   default:
@@ -114,8 +122,10 @@ tasks:
       - scripts/config --enable CONFIG_64BIT
       - scripts/config --enable CONFIG_X86_64
       - scripts/config --disable CONFIG_X86_32
-      - make ARCH=x86_64 olddefconfig
-      - make ARCH=x86_64 rustavailable
+      - scripts/config --enable CONFIG_DEBUG_INFO
+      - scripts/config --enable CONFIG_DEBUG_INFO_DWARF4
+      - make ARCH=x86_64 LLVM=1 olddefconfig
+      - make ARCH=x86_64 LLVM=1 rustavailable
     status:
       - test -f .config
 
@@ -131,8 +141,10 @@ tasks:
     dir: "{{.RUST_KERNEL_SRC_DIR}}"
     cmds:
       - task: config_rustkernel
-      - rustup install 1.78.0
-      - rustup override set 1.78.0
+      - rustup install 1.83.0
+      - rustup override set 1.83.0
+      - rustup component add rust-src
+      - make LLVM=1 rustavailable
       - make -j$(nproc)
     status:
       - test -f arch/x86_64/boot/bzImage
@@ -194,10 +206,10 @@ tasks:
       #   vars: {KDIR: "{{.KDIR}}"}
       # - task: hellomod:build
       #   vars: {KDIR: "{{.KDIR}}"}
-      # - task: nfmod:clean
-      #   vars: {KDIR: "{{.KDIR}}"}
-      # - task: nfmod:build
-      #   vars: {KDIR: "{{.KDIR}}"}
+      - task: hrsmod:clean
+        vars: {KDIR: "{{.KDIR}}"}
+      - task: hrsmod:build
+        vars: {KDIR: "{{.KDIR}}"}
       # - task: drvmod:build
         # vars: {KDIR: "{{.KDIR}}"}
       - task: create_initramfs
@@ -205,6 +217,7 @@ tasks:
       - cp {{.BB_SRC_DIR}}/busybox {{.INITRAMFS_DIR}}/bin/busybox
       # - cp {{.HELLOMOD_DIR}}/hello.ko {{.INITRAMFS_DIR}}/opt/hello.ko
       # - cp {{.NFMOD_DIR}}/nf.ko {{.INITRAMFS_DIR}}/opt/nf.ko
+      - cp {{.HRSMOD_DIR}}/hello_world.ko {{.INITRAMFS_DIR}}/opt/hello_world.ko
       - (cd {{.INITRAMFS_DIR}} && find . -print0 | cpio --null --create --verbose --format=newc | gzip --best) > "{{.INITRAMFS_FILE}}"
 
   run:
