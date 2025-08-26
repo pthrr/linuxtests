@@ -35,9 +35,11 @@
       ];
       shellHook = ''
         export KDIR="${kernel.dev}/lib/modules/${kernel.modDirVersion}/build"
+        echo "KDIR set to: $KDIR"
+
         export LLVM_SYS_180_PREFIX="${pkgs.llvm_18.dev}"
         export LIBCLANG_PATH="${pkgs.clang_18.cc.lib}/lib"
-        echo "KDIR set to: $KDIR"
+
         echo "GCC version: $(gcc --version | head -1)"
         echo "Clang version: $(clang --version | head -1)"
       '';

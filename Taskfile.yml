@@ -5,11 +5,6 @@ version: "3"
 vars:
   ROOT_DIR: "{{.TASKFILE_DIR}}"
 
-  KERNEL_VERSION: 6.12.10
-  KERNEL_TAR: linux-{{.KERNEL_VERSION}}.tar.xz
-  KERNEL_URL: https://cdn.kernel.org/pub/linux/kernel/v6.x/{{.KERNEL_TAR}}
-  KERNEL_SRC_DIR: components/kernel
-
   RUST_KERNEL_VERSION: 6.13
   RUST_KERNEL_TAR: rust-{{.RUST_KERNEL_VERSION}}.tar.gz
   RUST_KERNEL_URL: https://github.com/Rust-for-Linux/linux/archive/refs/tags/{{.RUST_KERNEL_TAR}}
@@ -22,18 +17,10 @@ vars:
 
   INITRAMFS_DIR: components/initramfs
   INITRAMFS_FILE: components/initramfs.cpio.gz
-  HELLOMOD_DIR: components/hellomod
-  NFMOD_DIR: components/nfmod
-  DRVMOD_DIR: components/drvmod
+
   HRSMOD_DIR: components/hellors
 
 includes:
-  hellomod:
-    taskfile:  "{{.HELLOMOD_DIR}}/Taskfile.yml"
-    dir: "{{.HELLOMOD_DIR}}"
-  nfmod:
-    taskfile:  "{{.NFMOD_DIR}}/Taskfile.yml"
-    dir: "{{.NFMOD_DIR}}"
   hrsmod:
     taskfile:  "{{.HRSMOD_DIR}}/Taskfile.yml"
     dir: "{{.HRSMOD_DIR}}"
@@ -42,16 +29,6 @@ tasks:
   default:
     cmds:
       - task --list-all
-
-  download_kernel:
-    cmds:
-      - echo "Downloading Linux kernel source..."
-      - wget -c {{.KERNEL_URL}} -O {{.KERNEL_SRC_DIR}}/{{.KERNEL_TAR}}
-      - echo "Extracting Linux kernel source..."
-      - tar -xf {{.KERNEL_SRC_DIR}}/{{.KERNEL_TAR}} -C {{.KERNEL_SRC_DIR}} --strip-components=1
-      - echo "Linux kernel source ready in {{.KERNEL_SRC_DIR}}."
-    status:
-      - test -d {{.KERNEL_SRC_DIR}}
 
   download_rustkernel:
     cmds:
@@ -63,46 +40,16 @@ tasks:
     status:
       - test -d {{.RUST_KERNEL_SRC_DIR}}
 
-  delete_kernel:
-    cmds:
-      - rm -rf {{.KERNEL_SRC_DIR}}
-    status:
-      - test ! -d {{.KERNEL_SRC_DIR}}
-
   delete_rustkernel:
     cmds:
       - rm -rf {{.RUST_KERNEL_SRC_DIR}}
     status:
       - test ! -d {{.RUST_KERNEL_SRC_DIR}}
 
-  clean_kernel:
-    dir: "{{.KERNEL_SRC_DIR}}"
-    cmds:
-      - make mrproper
-
   clean_rustkernel:
     dir: "{{.RUST_KERNEL_SRC_DIR}}"
     cmds:
       - make mrproper
-
-  config_kernel:
-    dir: "{{.KERNEL_SRC_DIR}}"
-    cmds:
-      - task: clean_kernel
-      - make tinyconfig
-      - scripts/config --enable CONFIG_PRINTK
-      - scripts/config --enable CONFIG_EARLY_PRINTK
-      - scripts/config --enable CONFIG_TTY
-      - scripts/config --enable CONFIG_BLK_DEV_INITRD
-      - scripts/config --enable CONFIG_BINFMT_ELF
-      - scripts/config --enable CONFIG_BINFMT_SCRIPT
-      - scripts/config --enable CONFIG_PROC_FS
-      - scripts/config --enable CONFIG_SYSFS
-      - scripts/config --enable CONFIG_MODULES
-      - scripts/config --enable CONFIG_64BIT
-      - make olddefconfig
-    status:
-      - test -f .config
 
   config_rustkernel:
     dir: "{{.RUST_KERNEL_SRC_DIR}}"
@@ -124,30 +71,29 @@ tasks:
       - scripts/config --disable CONFIG_X86_32
       - scripts/config --enable CONFIG_DEBUG_INFO
       - scripts/config --enable CONFIG_DEBUG_INFO_DWARF4
-      - make ARCH=x86_64 LLVM=1 olddefconfig
-      - make ARCH=x86_64 LLVM=1 rustavailable
+      - make ARCH=x86_64 olddefconfig
+      - make ARCH=x86_64 rustavailable
     status:
       - test -f .config
-
-  compile_kernel:
-    dir: "{{.KERNEL_SRC_DIR}}"
-    cmds:
-      - task: config_kernel
-      - make ARCH=x86_64 -j$(nproc)
-    status:
-      - test -f arch/x86_64/boot/bzImage
 
   compile_rustkernel:
     dir: "{{.RUST_KERNEL_SRC_DIR}}"
     cmds:
       - task: config_rustkernel
-      - rustup install 1.83.0
-      - rustup override set 1.83.0
+      - rustup install $(scripts/min-tool-version.sh rustc)
+      - rustup override set $(scripts/min-tool-version.sh rustc)
       - rustup component add rust-src
-      - make LLVM=1 rustavailable
+      - cargo install --locked --version $(scripts/min-tool-version.sh bindgen) bindgen-cli
+      - make rustavailable
       - make -j$(nproc)
     status:
       - test -f arch/x86_64/boot/bzImage
+
+  recompile_kernel:
+    dir: "{{.RUST_KERNEL_SRC_DIR}}"
+    cmds:
+      - rm -f arch/x86_64/boot/bzImage
+      - task: compile_rustkernel
 
   download_busybox:
     cmds:
@@ -194,40 +140,23 @@ tasks:
   clean_initramfs:
     cmds:
       - rm -f {{.INITRAMFS_DIR}}/bin/busybox
-      - rm -f {{.INITRAMFS_DIR}}/opt/hello.ko
-      - rm -f {{.INITRAMFS_DIR}}/opt/nf.ko
-      - rm -f {{.INITRAMFS_DIR}}/opt/drv.ko
+      - rm -f {{.INITRAMFS_DIR}}/opt/hello_world.ko
       - rm -f {{.INITRAMFS_FILE}}
 
   package_initramfs:
     cmds:
       - task: compile_busybox
-      # - task: hellomod:clean
-      #   vars: {KDIR: "{{.KDIR}}"}
-      # - task: hellomod:build
-      #   vars: {KDIR: "{{.KDIR}}"}
       - task: hrsmod:clean
         vars: {KDIR: "{{.KDIR}}"}
       - task: hrsmod:build
         vars: {KDIR: "{{.KDIR}}"}
-      # - task: drvmod:build
-        # vars: {KDIR: "{{.KDIR}}"}
       - task: create_initramfs
       - task: clean_initramfs
       - cp {{.BB_SRC_DIR}}/busybox {{.INITRAMFS_DIR}}/bin/busybox
-      # - cp {{.HELLOMOD_DIR}}/hello.ko {{.INITRAMFS_DIR}}/opt/hello.ko
-      # - cp {{.NFMOD_DIR}}/nf.ko {{.INITRAMFS_DIR}}/opt/nf.ko
       - cp {{.HRSMOD_DIR}}/hello_world.ko {{.INITRAMFS_DIR}}/opt/hello_world.ko
       - (cd {{.INITRAMFS_DIR}} && find . -print0 | cpio --null --create --verbose --format=newc | gzip --best) > "{{.INITRAMFS_FILE}}"
 
   run:
-    cmds:
-      - task: compile_kernel
-      - task: package_initramfs
-        vars: {KDIR: "{{.ROOT_DIR}}/{{.KERNEL_SRC_DIR}}"}
-      - qemu-system-x86_64 -kernel {{.KERNEL_SRC_DIR}}/arch/x86_64/boot/bzImage -initrd {{.INITRAMFS_FILE}}
-
-  run_rust:
     cmds:
       - task: compile_rustkernel
       - task: package_initramfs
@@ -236,13 +165,10 @@ tasks:
 
   clean:
     cmds:
-      - task: clean_kernel
       - task: clean_rustkernel
       - task: clean_busybox
       - task: clean_initramfs
-      - task: hellomod:clean
-        vars: {KDIR: "{{.ROOT_DIR}}/{{.RUST_KERNEL_SRC_DIR}}"}
-      - task: nfmod:clean
+      - task: hrsmod:clean
         vars: {KDIR: "{{.ROOT_DIR}}/{{.RUST_KERNEL_SRC_DIR}}"}
 
   download:
