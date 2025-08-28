@@ -5,10 +5,10 @@ version: "3"
 vars:
   ROOT_DIR: "{{.TASKFILE_DIR}}"
 
-  RUST_KERNEL_VERSION: 6.13
-  RUST_KERNEL_TAR: rust-{{.RUST_KERNEL_VERSION}}.tar.gz
-  RUST_KERNEL_URL: https://github.com/Rust-for-Linux/linux/archive/refs/tags/{{.RUST_KERNEL_TAR}}
-  RUST_KERNEL_SRC_DIR: components/rust_kernel
+  KERNEL_VERSION: 6.13
+  KERNEL_TAR: rust-{{.KERNEL_VERSION}}.tar.gz
+  KERNEL_URL: https://github.com/Rust-for-Linux/linux/archive/refs/tags/{{.KERNEL_TAR}}
+  KERNEL_SRC_DIR: components/kernel
 
   BB_VERSION: 1.37.0
   BB_TAR: busybox-{{.BB_VERSION}}.tar.bz2
@@ -30,31 +30,31 @@ tasks:
     cmds:
       - task --list-all
 
-  download_rustkernel:
+  download_kernel:
     cmds:
       - echo "Downloading Rust Linux kernel source..."
-      - wget -c {{.RUST_KERNEL_URL}} -O {{.RUST_KERNEL_SRC_DIR}}/{{.RUST_KERNEL_TAR}}
+      - wget -c {{.KERNEL_URL}} -O {{.KERNEL_SRC_DIR}}/{{.KERNEL_TAR}}
       - echo "Extracting Rust Linux kernel source..."
-      - tar -xf {{.RUST_KERNEL_SRC_DIR}}/{{.RUST_KERNEL_TAR}} -C {{.RUST_KERNEL_SRC_DIR}} --strip-components=1
-      - echo "Rust Linux kernel source ready in {{.RUST_KERNEL_SRC_DIR}}."
+      - tar -xf {{.KERNEL_SRC_DIR}}/{{.KERNEL_TAR}} -C {{.KERNEL_SRC_DIR}} --strip-components=1
+      - echo "Rust Linux kernel source ready in {{.KERNEL_SRC_DIR}}."
     status:
-      - test -d {{.RUST_KERNEL_SRC_DIR}}
+      - test -d {{.KERNEL_SRC_DIR}}
 
-  delete_rustkernel:
+  delete_kernel:
     cmds:
-      - rm -rf {{.RUST_KERNEL_SRC_DIR}}
+      - rm -rf {{.KERNEL_SRC_DIR}}
     status:
-      - test ! -d {{.RUST_KERNEL_SRC_DIR}}
+      - test ! -d {{.KERNEL_SRC_DIR}}
 
-  clean_rustkernel:
-    dir: "{{.RUST_KERNEL_SRC_DIR}}"
+  clean_kernel:
+    dir: "{{.KERNEL_SRC_DIR}}"
     cmds:
       - make mrproper
 
-  config_rustkernel:
-    dir: "{{.RUST_KERNEL_SRC_DIR}}"
+  config_kernel:
+    dir: "{{.KERNEL_SRC_DIR}}"
     cmds:
-      - task: clean_rustkernel
+      - task: clean_kernel
       - make tinyconfig
       - scripts/config --enable CONFIG_PRINTK
       - scripts/config --enable CONFIG_EARLY_PRINTK
@@ -76,10 +76,10 @@ tasks:
     status:
       - test -f .config
 
-  compile_rustkernel:
-    dir: "{{.RUST_KERNEL_SRC_DIR}}"
+  compile_kernel:
+    dir: "{{.KERNEL_SRC_DIR}}"
     cmds:
-      - task: config_rustkernel
+      - task: config_kernel
       - rustup install $(scripts/min-tool-version.sh rustc)
       - rustup override set $(scripts/min-tool-version.sh rustc)
       - rustup component add rust-src
@@ -90,10 +90,10 @@ tasks:
       - test -f arch/x86_64/boot/bzImage
 
   recompile_kernel:
-    dir: "{{.RUST_KERNEL_SRC_DIR}}"
+    dir: "{{.KERNEL_SRC_DIR}}"
     cmds:
       - rm -f arch/x86_64/boot/bzImage
-      - task: compile_rustkernel
+      - task: compile_kernel
 
   download_busybox:
     cmds:
@@ -158,27 +158,25 @@ tasks:
 
   run:
     cmds:
-      - task: compile_rustkernel
+      - task: compile_kernel
       - task: package_initramfs
-        vars: {KDIR: "{{.ROOT_DIR}}/{{.RUST_KERNEL_SRC_DIR}}"}
-      - qemu-system-x86_64 -kernel {{.RUST_KERNEL_SRC_DIR}}/arch/x86_64/boot/bzImage -initrd {{.INITRAMFS_FILE}}
+        vars: {KDIR: "{{.ROOT_DIR}}/{{.KERNEL_SRC_DIR}}"}
+      - qemu-system-x86_64 -kernel {{.KERNEL_SRC_DIR}}/arch/x86_64/boot/bzImage -initrd {{.INITRAMFS_FILE}}
 
   clean:
     cmds:
-      - task: clean_rustkernel
+      - task: clean_kernel
       - task: clean_busybox
       - task: clean_initramfs
       - task: hrsmod:clean
-        vars: {KDIR: "{{.ROOT_DIR}}/{{.RUST_KERNEL_SRC_DIR}}"}
+        vars: {KDIR: "{{.ROOT_DIR}}/{{.KERNEL_SRC_DIR}}"}
 
   download:
     cmds:
       - task: download_kernel
-      - task: download_rustkernel
       - task: download_busybox
 
   delete:
     cmds:
       - task: delete_kernel
-      - task: delete_rustkernel
       - task: delete_busybox

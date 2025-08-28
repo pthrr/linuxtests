@@ -1,6 +1,6 @@
 .task/
 
-components/rust_kernel/
+components/kernel/
 components/busybox/
 components/initramfs/bin/busybox
 components/initramfs.cpio.gz
